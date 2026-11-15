@@ -136,6 +136,11 @@ void updateDirectionLeds(float sidewaysAngle)
   controller.setControllerName("TheTilter");
   controller.setPlayerColor("#ff001a");
   controller.setPaddleSize(200);
+  
+  // Use our uploaded MP3 as the background music.
+controller.setMusic("https://raw.githubusercontent.com/hiro9884/CC_Luda_and_Hiro/main/mariomusic.mp3");
+// Play our custom sound when our paddle hits the puck.
+controller.setHitSound("https://raw.githubusercontent.com/hiro9884/CC_Luda_and_Hiro/main/sound.mp3");
 
   // Start Bluetooth controller operation.
   controller.begin();
