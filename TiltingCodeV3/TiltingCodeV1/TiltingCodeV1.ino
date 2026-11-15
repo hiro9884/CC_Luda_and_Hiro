@@ -90,44 +90,34 @@ float smoothTilt(float newAngle)
 }
 
 
-// Show the leaning direction using the two external LEDs.
+// Show tilt direction, with dim steady light when upright.
 void updateDirectionLeds(float sidewaysAngle)
 {
-  // Negative angles beyond the neutral range indicate a left lean.
+  // Set brightness from 0 (off) to 255 (fully on).
+  const int brightLevel = 255;
+  const int dimLevel = 38;
+
+  // Leaning left: light the left shoulder and turn off the right.
   if (sidewaysAngle < -neutralRange)
   {
-    digitalWrite(leftLedPin, HIGH);
-    digitalWrite(rightLedPin, LOW);
+    analogWrite(leftLedPin, brightLevel);
+    analogWrite(rightLedPin, 0);
   }
 
-  // Positive angles beyond the neutral range indicate a right lean.
+  // Leaning right: light the right shoulder and turn off the left.
   else if (sidewaysAngle > neutralRange)
   {
-    digitalWrite(leftLedPin, LOW);
-    digitalWrite(rightLedPin, HIGH);
+    analogWrite(leftLedPin, 0);
+    analogWrite(rightLedPin, brightLevel);
   }
 
-  // Near upright, turn both direction LEDs off.
+  // Standing upright: keep both shoulders steadily dim.
   else
   {
-    digitalWrite(leftLedPin, LOW);
-    digitalWrite(rightLedPin, LOW);
+    analogWrite(leftLedPin, dimLevel);
+    analogWrite(rightLedPin, dimLevel);
   }
 }
-
-
-// Initialize the hardware and controller once at startup.
-void setup()
-{
-  // Start Serial Monitor communication.
-  Serial.begin(9600);
-
-  // Configure both direction LEDs and start them off.
-  pinMode(leftLedPin, OUTPUT);
-  pinMode(rightLedPin, OUTPUT);
-  digitalWrite(leftLedPin, LOW);
-  digitalWrite(rightLedPin, LOW);
-
   // Start the IMU at its default I2C address, 0x6A.
   // This reports a failure but does not stop the sketch.
   if (!imu.begin_I2C())
