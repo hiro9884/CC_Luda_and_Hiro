@@ -47,12 +47,94 @@ const int closeThreshold = -5;
 
 bool servoOpen = false;
 
+// 勝利ダンス
+const int danceLeft = 0;
+const int danceRight = 180;
+const unsigned long danceInterval = 250;
+
+bool victoryDancing = false;
+int danceStep = 0;
+unsigned long lastDanceTime = 0;
+
+int paddleSize = 100; // 最初は100％
+
+bool servoControlEnabled = false;
+const int restingAngle = 90;
+
+void onPongEvent(int event, int value)
+{
+  if (event == EVENT_MATCH_START)
+  {
+    Serial.print("EVENT: ");
+  Serial.print(event);
+  Serial.print(" VALUE: ");
+  Serial.println(value);
+
+    // サイズをリセット
+    paddleSize = 100;
+    controller.setPaddleSize(paddleSize);
+
+    // Tiltによるサーボ操作を止めて開始ダンス
+    servoControlEnabled = false;
+    victoryDancing = true;
+    danceStep = 0;
+    lastDanceTime = millis();
+    servo.write(danceLeft);
+  }
+
+  // カウントダウンのGO
+  if (event == EVENT_COUNTDOWN && value == 0)
+  {
+    servoControlEnabled = true;
+  }
+
+  // 自分のパドルがヒットしたらダンス
+  if (event == EVENT_HIT && servoControlEnabled)
+  {
+    victoryDancing = true;
+    danceStep = 0;
+    lastDanceTime = millis();
+    servo.write(danceLeft);
+  }
+
+  if (event == EVENT_SCORED)
+  {
+    paddleSize = min(paddleSize + 20, 200);
+    controller.setPaddleSize(paddleSize);
+  }
+
+  if (event == EVENT_WON)
+  {
+    servoControlEnabled = false;
+    victoryDancing = true;
+    danceStep = 0;
+    lastDanceTime = millis();
+    servo.write(danceLeft);
+  }
+
+  if (event == EVENT_LOST)
+  {
+    servoControlEnabled = false;
+    victoryDancing = false;
+    servo.write(restingAngle);
+  }
+}
+
+// ポーズによる色変更
+const int poseThreshold = 0;
+const unsigned long poseHoldTime = 100; // 1秒
+
+unsigned long poseStartTime = 0;
+bool poseHolding = false;
+bool goldMode = false;
+
+
 void setup()
 {
   Serial.begin(9600);
 
-  servo.setPeriodHertz(50);
-servo.attach(servoPin, 1000, 2000);
+servoOpen = false;
+servoControlEnabled = false;
 
   // Start the IMU on the I2C bus (address 0x6A)
   // and the filter (100 readings a second)
@@ -78,15 +160,15 @@ servo.attach(servoPin, 1000, 2000);
   // controller.setMoveSpeed(10);
 
   // Paddle size: 50 - 200 percent (normal is 100)
-  controller.setPaddleSize(200);
+  controller.setPaddleSize(paddleSize);
 
   // Sounds: a built-in name, or an https:// link straight to your own mp3 or wav file
   // Built-in sounds: pingpong, claves, tick, bell, gong, bikebell, flourish,
   // applause, pip, quindar, clock, blip, boop, pluck, click, laser, drum,
   // chirp, zap, thud, wood, glass, coin
-  controller.setHitSound("applause"); // When your paddle hits the puck
-  controller.setScoreSound("Wood");  // When you score a point
-  controller.setWinSound("drum");    // When you win the match
+  controller.setHitSound("wood"); // When your paddle hits the puck
+  controller.setScoreSound("applause");  // When you score a point
+  controller.setWinSound("gong");    // When you win the match
 
   // Background music: a built-in name, or an https:// link straight to your own mp3 file
   // Built-in music: drift, tabletop, arcade, nightbus, gymnopedie,
@@ -94,13 +176,28 @@ servo.attach(servoPin, 1000, 2000);
   // The Music tile in the game's lobby has to be set to "Players' choice" to hear it
   controller.setMusic("https://raw.githubusercontent.com/DigitalFuturesOCADU/df-pong/main/game/cc26/assets/music/palmleaf.mp3");
 
+
+  controller.onGameEvent(onPongEvent);
+
   controller.begin();
 
-    // ゲーム側の初期化が終わってからサーボを設定
-  servo.setPeriodHertz(50);
-  servo.attach(servoPin, 1000, 2000);
-  servo.write(0);
-  servoOpen = false;
+  controller.begin();
+
+servo.setPeriodHertz(50);
+servo.attach(servoPin, 500, 2500);
+
+Serial.print("Servo attached: ");
+Serial.println(servo.attached());
+
+// 起動時の確認用：テスト後はこの動作を削除する
+servo.write(60);
+delay(700);
+servo.write(120);
+delay(700);
+servo.write(restingAngle);
+
+servoOpen = false;
+servoControlEnabled = false;
 }
 
 void loop()
@@ -143,18 +240,74 @@ void loop()
   // topAngle puts the paddle at the top, bottomAngle at the bottom
   controller.sendPosition(tiltAngle, topAngle, bottomAngle);
 
-  if (!servoOpen && tiltAngle <= openThreshold)
+  // −15°以下の傾きを保つと金色になる
+if (tiltAngle <= poseThreshold)
 {
-  Serial.println("OPEN command");
-  servo.write(180);
-  servoOpen = true;
+  // ポーズを始めた時刻を記録
+  if (!poseHolding)
+  {
+    poseStartTime = millis();
+    poseHolding = true;
+  }
 
+  // 1秒間保ったら色を変更
+  if (!goldMode && millis() - poseStartTime >= poseHoldTime)
+  {
+    controller.setPlayerColor("#FFD700");
+    goldMode = true;
+    Serial.println("POSE: GOLD!");
+  }
 }
-else if (servoOpen && tiltAngle > closeThreshold)
+else
 {
-  Serial.println("CLOSE command");
-  servo.write(0);
-  servoOpen = false;
+  // 傾きを戻したら保持時間をリセット
+  poseHolding = false;
 
+  if (goldMode)
+  {
+    controller.setPlayerColor("#00BFFF");
+    goldMode = false;
+    Serial.println("POSE: BLUE");
+  }
+}
+
+  if (victoryDancing)
+{
+  if (millis() - lastDanceTime >= danceInterval)
+  {
+    lastDanceTime = millis();
+    danceStep++;
+
+    if (danceStep >= 6)
+    {
+      // ダンス終了
+      victoryDancing = false;
+      servo.write(restingAngle);
+
+      // 現在の傾きに合わせて次のループで位置を決める
+      servoOpen = false;
+    }
+    else
+    {
+      servo.write(
+        danceStep % 2 == 0 ? danceLeft : danceRight
+      );
+    }
+  }
+}
+else if (servoControlEnabled)
+{
+  // GO以降、ダンスが終わってからTiltに連動
+  if (tiltAngle <= openThreshold)
+  {
+    servo.write(0);
+    servoOpen = true;
+  }
+  else if (tiltAngle > closeThreshold)
+  {
+    servo.write(180);
+    servoOpen = false;
+  }
 }
 }
+// 待機中は命令を出さず、静止位置を保つ
